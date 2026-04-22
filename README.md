@@ -79,6 +79,11 @@ A lightweight **FastAPI-based tool server** is included to expose structured too
 
 This simulates an MCP-style tool access layer for agent interaction.
 
+## Demo Video
+
+Watch the demo here:  
+https://drive.google.com/file/d/1KY_s5uaC__9jscIrZ8wUsptbeeSDP7Ec/view?usp=drive_link
+
 ---
 
 ## Tech Stack
