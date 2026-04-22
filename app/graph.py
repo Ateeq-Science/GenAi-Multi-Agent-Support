@@ -23,7 +23,7 @@ class AgentState(TypedDict, total=False):
 
 
 def supervisor_node(state: AgentState) -> AgentState:
-    return {"route": route_query(state["user_query"]) }
+    return {"route": route_query(state["user_query"])}
 
 
 def sql_node(state: AgentState) -> AgentState:
@@ -37,12 +37,18 @@ def rag_node(state: AgentState) -> AgentState:
 
 def synthesis_node(state: AgentState) -> AgentState:
     route = state.get("route", "RAG")
+
     if route == "SQL":
         return {"final_answer": state.get("sql_result", "No structured answer available.")}
+
     if route == "RAG":
         return {"final_answer": state.get("rag_result", "No policy answer available.")}
 
-    llm = ChatOpenAI(api_key=settings.openai_api_key, model=settings.openai_model, temperature=0)
+    llm = ChatOpenAI(
+        api_key=settings.openai_api_key,
+        model=settings.openai_model,
+        temperature=0,
+    )
     prompt = ChatPromptTemplate.from_template(SYNTHESIS_PROMPT)
     chain = prompt | llm
     result = chain.invoke(
@@ -64,6 +70,13 @@ def _route_after_supervisor(state: AgentState) -> str:
     return "both_start"
 
 
+def _route_after_sql(state: AgentState) -> str:
+    route = state.get("route", "SQL")
+    if route == "BOTH":
+        return "rag"
+    return "synthesis"
+
+
 def build_graph():
     workflow = StateGraph(AgentState)
     workflow.add_node("supervisor", supervisor_node)
@@ -72,6 +85,7 @@ def build_graph():
     workflow.add_node("synthesis", synthesis_node)
 
     workflow.set_entry_point("supervisor")
+
     workflow.add_conditional_edges(
         "supervisor",
         _route_after_supervisor,
@@ -81,7 +95,16 @@ def build_graph():
             "both_start": "sql",
         },
     )
-    workflow.add_edge("sql", "rag")
+
+    workflow.add_conditional_edges(
+        "sql",
+        _route_after_sql,
+        {
+            "rag": "rag",
+            "synthesis": "synthesis",
+        },
+    )
+
     workflow.add_edge("rag", "synthesis")
     workflow.add_edge("synthesis", END)
 

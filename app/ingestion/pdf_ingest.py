@@ -2,35 +2,45 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from app.utils.config import POLICY_DIR, VECTOR_DIR, settings
+from app.utils.config import POLICY_DIR, VECTOR_STORE_DIR, settings
 
 
 def main() -> None:
-    POLICY_DIR.mkdir(parents=True, exist_ok=True)
-    VECTOR_DIR.mkdir(parents=True, exist_ok=True)
+    policy_dir = Path(POLICY_DIR)
+    vector_dir = Path(VECTOR_STORE_DIR)
 
-    pdf_files = list(POLICY_DIR.glob("*.pdf"))
+    if not policy_dir.exists():
+        raise FileNotFoundError(f"Policy directory not found: {policy_dir}")
+
+    pdf_files = list(policy_dir.glob("*.pdf"))
     if not pdf_files:
-        print(f"No PDFs found in {POLICY_DIR}. Add policy PDFs and run again.")
-        return
+        raise FileNotFoundError(
+            f"No PDF files found in {policy_dir}. Add at least one policy PDF first."
+        )
 
-    loader = PyPDFDirectoryLoader(str(POLICY_DIR))
-    docs = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    splits = splitter.split_documents(docs)
+    documents = []
+    for pdf_path in pdf_files:
+        loader = PyPDFLoader(str(pdf_path))
+        documents.extend(loader.load())
 
-    embeddings = OpenAIEmbeddings(
-        api_key=settings.openai_api_key,
-        model=settings.embedding_model,
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=150,
     )
-    vector_store = FAISS.from_documents(splits, embeddings)
-    vector_store.save_local(str(VECTOR_DIR))
-    print(f"Indexed {len(splits)} chunks from {len(pdf_files)} PDF(s) into {VECTOR_DIR}")
+    chunks = splitter.split_documents(documents)
+
+    embeddings = OpenAIEmbeddings(api_key=settings.openai_api_key)
+
+    vector_dir.mkdir(parents=True, exist_ok=True)
+    vector_store = FAISS.from_documents(chunks, embeddings)
+    vector_store.save_local(str(vector_dir))
+
+    print(f"Ingested {len(pdf_files)} PDF(s) and saved vector store to {vector_dir}")
 
 
 if __name__ == "__main__":

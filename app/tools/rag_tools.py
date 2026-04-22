@@ -1,40 +1,47 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import List, Tuple
 
+from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 
-from app.utils.config import VECTOR_DIR, settings
+from app.utils.config import VECTOR_STORE_DIR, settings
 
 
 def load_vector_store() -> FAISS:
-    if not VECTOR_DIR.exists() or not any(VECTOR_DIR.iterdir()):
+    vector_dir = Path(VECTOR_STORE_DIR)
+    if not vector_dir.exists():
         raise FileNotFoundError(
-            f"Vector store not found at {VECTOR_DIR}. Run `python -m app.ingestion.pdf_ingest` first."
+            f"Vector store not found at {vector_dir}. Run: python -m app.ingestion.pdf_ingest"
         )
-    embeddings = OpenAIEmbeddings(
-        api_key=settings.openai_api_key,
-        model=settings.embedding_model,
-    )
+
+    embeddings = OpenAIEmbeddings(api_key=settings.openai_api_key)
     return FAISS.load_local(
-        folder_path=str(VECTOR_DIR),
-        embeddings=embeddings,
+        str(vector_dir),
+        embeddings,
         allow_dangerous_deserialization=True,
     )
 
 
-def retrieve_policy_context(query: str, top_k: int | None = None) -> tuple[str, list[dict[str, Any]]]:
-    top_k = top_k or settings.top_k
+def retrieve_policy_context(query: str, k: int = 4) -> Tuple[str, List[dict]]:
     store = load_vector_store()
-    docs = store.similarity_search(query, k=top_k)
-    context_parts: list[str] = []
-    sources: list[dict[str, Any]] = []
-    for idx, doc in enumerate(docs, start=1):
-        source = Path(doc.metadata.get("source", "unknown")).name
-        page = doc.metadata.get("page", "N/A")
-        chunk = doc.page_content.strip()
-        context_parts.append(f"[Source {idx}: {source}, page {page}]\n{chunk}")
-        sources.append({"source": source, "page": page})
-    return "\n\n".join(context_parts), sources
+    docs: List[Document] = store.similarity_search(query, k=k)
+
+    if not docs:
+        return "No relevant policy context found.", []
+
+    context = "\n\n".join(doc.page_content for doc in docs)
+    sources = []
+
+    for doc in docs:
+        metadata = doc.metadata or {}
+        sources.append(
+            {
+                "source": metadata.get("source", "Unknown"),
+                "page": metadata.get("page", "N/A"),
+            }
+        )
+
+    return context, sources
