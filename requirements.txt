@@ -1,0 +1,13 @@
+streamlit>=1.33.0
+langchain>=0.2.14
+langchain-community>=0.2.12
+langchain-openai>=0.1.22
+langgraph>=0.2.14
+faiss-cpu>=1.8.0.post1
+pypdf>=4.3.1
+fastapi>=0.112.0
+uvicorn>=0.30.3
+sqlalchemy>=2.0.32
+python-dotenv>=1.0.1
+pydantic>=2.8.2
+pandas>=2.2.2
